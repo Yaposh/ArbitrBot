@@ -234,7 +234,7 @@ function checkAvailableNext(body) {
     let currentPageNum = (/("documentsPage" value)(\D){2}(\d{1,3})(\D)/g).exec(body)[3],
         totalPageNum = (/("documentsPagesCount" value)(\D){2}(\d{1,3})(\D)/g).exec(body)[3];
 
-	return currentPageNum !== totalPageNum;
+	return currentPageNum !== totalPageNum && totalPageNum != 0;
 }
 
 function exportDeals(result, id) {
