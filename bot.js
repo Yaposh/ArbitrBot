@@ -11,9 +11,17 @@ function Bot(config) {
     let self = this;
     const rp = require('request-promise');
     const jar = rp.jar();
-	
-	
+
 	this.init = async function() {
+
+        if (!fs.existsSync('./results'))
+            fs.mkdirSync('results');
+
+        if (!fs.existsSync('./results/deals'))
+            fs.mkdirSync('./results/deals');
+
+        if (!fs.existsSync('./results/docs'))
+            fs.mkdirSync('./results/docs');
 
         let proxyStr = this.getProxy(true);
 
@@ -82,7 +90,7 @@ function Bot(config) {
 			page.on('response', (response) => {
 				if (response._url.includes(baseUrl + '/Recaptcha/GetCaptchaId')) {
 					let error = response._status === 429 ? 'ipban' : 'captcha';
-					//console.log(response)
+                    console.log(response)
 					reject({ error: error });
 				}
 			})
@@ -90,6 +98,8 @@ function Bot(config) {
             page.waitFor('.b-form-submitters button').then(() => {
                 this.injectCss();
                 page.$('.b-form-submitters button').then(element => element.click());
+            }).catch(error => {
+                reject({ error: error });
             })
 
             page.goto(baseUrl).catch((err) => {
@@ -165,38 +175,80 @@ function Bot(config) {
         })
     };
 
-    this.checkBanks = function () {
+    this.checkDeals = async function (deals) {
 
+        let result = [];
+
+        for (let deal of deals) {
+            let options = this.options;
+
+            options.method = 'GET';
+            options.uri = deal.url.split('.ru')[1];
+
+            let res = await rp(options),
+               // resJson = JSON.parse(res),
+                caseState = res["Result"]["CaseInfo"]["CaseState"];
+
+            if (caseState !== 'Рассмотрение дела завершено')
+                result.push(deal);
+        }
+
+        return result;
     };
 
-    this.parseDocs = function(url) {
+    this.parseDocs = async function(deal, pageIndex = 1, accum = []) {
 
         let options = this.options;
 
-        const caseId = url.split('/').pop();
+        const caseId = deal.url.split('/').pop();
 
         options.method = 'GET';
-        options.uri = `/Kad/CaseDocumentsPage?caseId=${caseId}&page=1&perPage=25`;
+        options.uri = `/Kad/CaseDocumentsPage?caseId=${caseId}&page=${pageIndex}&perPage=25`;
 
-        return rp(options).then((res) => {
+        let res = await rp(options);
 
-            //let jsonRes = JSON.parse(res);
+        //let jsonRes = JSON.parse(res);
 
-            return res["Result"]["Items"].reduce((accum, item) => {
-
-                if (item["ContentTypes"].some(item => item.includes('О включении требований в реестр требований кредиторов')))
-                    accum.push(item);
-                return accum;
-            }, []);
-
+        res["Result"]["Items"].forEach(item => {
+            if (item["ContentTypes"].some(item => item.includes('О включении требований в реестр требований кредиторов'))) {
+                let caseId = item['CaseId'],
+                    id = item['Id'],
+                    filename = item['FileName'],
+                    url = `https://kad.arbitr.ru/Document/Pdf/${caseId}/${id}/${filename}?isAddStamp=False`;
+                accum.push({ url, bankID: deal.id });
+            }
         });
+
+        if (pageIndex != res["Result"]["PagesCount"] && res["Result"]["TotalCount"] > 0)
+            return this.parseDocs(deal, pageIndex + 1, accum);
+
+        return accum;
+    };
+
+    this.downloadDocs = async function (docs) {
+
+        let banks = {};
+
+        for (let doc of docs) {
+            if (banks[doc.bankID])
+                banks[doc.bankID].push(doc.url);
+            else
+                banks[doc.bankID] = [doc.url];
+        }
+
+        for (let bankID in banks) {
+
+            let data = JSON.stringify(banks[bankID]);
+
+            fs.writeFile(`./results/docs/${bankID}.json`, data, 'utf8', () => {});
+        }
     };
 
     this.importDeals = function () {
-        let files = fs.readdirSync('./results/');
+        let files = fs.readdirSync('./results/deals/');
 
         let items = files.flatMap(filename => {
-            let file = fs.readFileSync('./results/' + filename).toString(),
+            let file = fs.readFileSync('./results/deals/' + filename).toString(),
                 links = JSON.parse(file),
                 bankID = filename.split('.')[0];
 
@@ -238,11 +290,9 @@ function checkAvailableNext(body) {
 }
 
 function exportDeals(result, id) {
-    if (!fs.existsSync('./results'))
-        fs.mkdirSync('results');
 
     let json = JSON.stringify(result);
-    fs.writeFile(`./results/${id}.json`, json, 'utf8', () => {});
+    fs.writeFile(`./results/deals/${id}.json`, json, 'utf8', () => {});
 }
 
 

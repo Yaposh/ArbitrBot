@@ -15,27 +15,34 @@ let bot = new Bot({
 
 bot.init().then(() => {
 	bot.auth().then(async () => {
-		console.log('Authenticated')
+		console.info('Authenticated')
 		bot.initTransport();
 
 		let tempSearch;
 
 		if (importDealsLocal) {
 			tempSearch = await bot.importDeals(searchItems);
-			console.log('Deals imported localy: ' + tempSearch.length);
+			console.info('Deals imported localy: ' + tempSearch.length);
 		} else {
 			tempSearch = await bot.parseDeals(searchItems);
-			console.log('Parsing links done: ' + tempSearch.length);
+			console.info('Parsing links done: ' + tempSearch.length);
 		}
 
-		/*for (let searchItem of tempSearch) {
-			let parseResult = await bot.parseDocs(searchItem.url);
+		let dealsBeforeCheck = tempSearch.length;
+		tempSearch = await bot.checkDeals(tempSearch);
 
-			console.log(parseResult);
-		}*/
+		console.info(`Deals checked: ${tempSearch.length} good, ${dealsBeforeCheck} total`);
 
+		let docs = [];
+		for (let deal of tempSearch) {
+			docs = docs.concat(await bot.parseDocs(deal))
+		}
 
-		console.log('Work done, closing.');
+		console.info('Documents parsed: ' + docs.length);
+
+		await bot.downloadDocs(docs);
+
+		console.info('Work done, closing.');
 		bot.close();
 
 	}).catch((err) => {
