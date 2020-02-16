@@ -52,7 +52,7 @@ function Bot(config) {
         });
 
         this.options = {
-            //proxy: 'http://' + this.getProxy(),
+            proxy: 'http://' + this.getProxy(),
             method: 'POST',
             baseUrl: baseUrl,
             uri: '/Kad/SearchInstances',
