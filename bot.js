@@ -30,7 +30,7 @@ function Bot(config) {
             ignoreHTTPSErrors: true,
             timeout: 60000,
             //executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-            //args: [ '--proxy-server=' + proxyStr ]
+            args: [ '--proxy-server=' + proxyStr ]
         });
 
 
