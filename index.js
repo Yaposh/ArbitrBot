@@ -7,7 +7,8 @@ const fs = require('fs');
 const searchItems = fs.readFileSync("./banks.txt", "utf-8").split("\r\n");
 const proxyList = fs.readFileSync("./proxies.txt", "utf-8").split("\r\n");
 
-const importDealsLocal = false;
+const importDealsLocal = true;
+//const useProxy = false;
 
 let bot = new Bot({
 	proxyList

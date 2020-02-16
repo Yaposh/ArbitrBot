@@ -30,8 +30,9 @@ function Bot(config) {
             ignoreHTTPSErrors: true,
             timeout: 60000,
             //executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-            args: [ '--proxy-server=' + proxyStr ]
+            //args: [ '--proxy-server=' + proxyStr ]
         });
+
 
 		let page = await this.browser.newPage();
 		await page.setRequestInterception(true);
@@ -51,7 +52,7 @@ function Bot(config) {
         });
 
         this.options = {
-           // proxy: 'http://' + this.getProxy(),
+            //proxy: 'http://' + this.getProxy(),
             method: 'POST',
             baseUrl: baseUrl,
             uri: '/Kad/SearchInstances',
@@ -90,7 +91,7 @@ function Bot(config) {
 			page.on('response', (response) => {
 				if (response._url.includes(baseUrl + '/Recaptcha/GetCaptchaId')) {
 					let error = response._status === 429 ? 'ipban' : 'captcha';
-                    console.log(response)
+					//console.log(response)
 					reject({ error: error });
 				}
 			})
@@ -186,8 +187,8 @@ function Bot(config) {
             options.uri = deal.url.split('.ru')[1];
 
             let res = await rp(options),
-               // resJson = JSON.parse(res),
-                caseState = res["Result"]["CaseInfo"]["CaseState"];
+                resJson = typeof res === 'string' ? JSON.parse(res) : res,
+                caseState = resJson["Result"]["CaseInfo"]["CaseState"];
 
             if (caseState !== 'Рассмотрение дела завершено')
                 result.push(deal);
@@ -207,9 +208,9 @@ function Bot(config) {
 
         let res = await rp(options);
 
-        //let jsonRes = JSON.parse(res);
+        let jsonRes = typeof res === 'string' ? JSON.parse(res) : res;
 
-        res["Result"]["Items"].forEach(item => {
+        jsonRes["Result"]["Items"].forEach(item => {
             if (item["ContentTypes"].some(item => item.includes('О включении требований в реестр требований кредиторов'))) {
                 let caseId = item['CaseId'],
                     id = item['Id'],
@@ -219,7 +220,7 @@ function Bot(config) {
             }
         });
 
-        if (pageIndex != res["Result"]["PagesCount"] && res["Result"]["TotalCount"] > 0)
+        if (pageIndex != jsonRes["Result"]["PagesCount"] && jsonRes["Result"]["TotalCount"] > 0)
             return this.parseDocs(deal, pageIndex + 1, accum);
 
         return accum;
