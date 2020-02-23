@@ -181,20 +181,33 @@ function Bot(config) {
         let result = [];
 
         for (let deal of deals) {
-            let options = this.options;
+            let options = this.options,
+                dealID = deal.url.split('.ru')[1];
 
             options.method = 'GET';
-            options.uri = deal.url.split('.ru')[1];
+            options.uri = dealID;
 
-            let res = await rp(options),
-                resJson = typeof res === 'string' ? JSON.parse(res) : res,
-                caseState = resJson["Result"]["CaseInfo"]["CaseState"];
+            console.log('Checking deal: ' + dealID);
+
+            let res = await this.checkDeal(options),
+                caseState = res["Result"]["CaseInfo"]["CaseState"];
 
             if (caseState !== 'Рассмотрение дела завершено')
                 result.push(deal);
         }
 
         return result;
+    };
+
+    this.checkDeal = function (req) {
+        return rp(req).catch((err) => {
+            console.log(err);
+
+            let newProxy = 'http://' + this.getProxy(true);
+            this.options.proxy = req.proxy = newProxy;
+
+            return this.checkDeal(req);
+        }).then(res => typeof res === 'string' ? JSON.parse(res) : res)
     };
 
     this.parseDocs = async function(deal, pageIndex = 1, accum = []) {
@@ -206,7 +219,7 @@ function Bot(config) {
         options.method = 'GET';
         options.uri = `/Kad/CaseDocumentsPage?caseId=${caseId}&page=${pageIndex}&perPage=25`;
 
-        let res = await rp(options);
+        let res = await this.parseDoc(options);
 
         let jsonRes = typeof res === 'string' ? JSON.parse(res) : res;
 
@@ -224,6 +237,18 @@ function Bot(config) {
             return this.parseDocs(deal, pageIndex + 1, accum);
 
         return accum;
+    };
+
+    this.parseDoc = function (req) {
+        return rp(options).catch((err) => {
+            console.log(err);
+
+            let newProxy = 'http://' + this.getProxy(true);
+            this.options.proxy = req.proxy = newProxy;
+
+            return this.parseDoc(req);
+
+        }).then(res => typeof res === 'string' ? JSON.parse(res) : res)
     };
 
     this.downloadDocs = async function (docs) {
