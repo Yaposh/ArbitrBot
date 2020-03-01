@@ -34,12 +34,18 @@ function Bot(config) {
         });
 
 
-		let page = await this.browser.newPage();
-		await page.setRequestInterception(true);
+		this.newPage = async function () {
+            const context = await this.browser.createIncognitoBrowserContext();
+            const page = await context.newPage();
 
-        self.page = page;
+            let pages = await this.browser.pages();
 
-        return page;
+            await pages[0].close();
+
+            self.page = page;
+            return page.setRequestInterception(true).then(() => page)
+        };
+
 	};
 
 	this.injectCss = async function () {
@@ -74,7 +80,7 @@ function Bot(config) {
 
     this.auth = async function() {
 
-        let page = this.page,
+        let page = await this.newPage(),
             self = this,
             proxyStr = this.getProxy();
 
@@ -168,7 +174,7 @@ function Bot(config) {
 				return accum
 			}
 		}).catch(err => {
-            console.log(err.name);
+            console.log("Unexpected error on options: ",err.statusCode);
             if (err.statusCode === 429 || err.name === 'RequestError') {
                 this.options.proxy = this.getProxy(true);
                 return this.searchUrls(searchItem, pageIndex, accum)
@@ -201,12 +207,31 @@ function Bot(config) {
 
     this.checkDeal = function (req) {
         return rp(req).catch((err) => {
-            console.log(err);
+            if (err.statusCode === 451) {
+                console.info('Session ban, re-auth');
 
-            let newProxy = 'http://' + this.getProxy(true);
-            this.options.proxy = req.proxy = newProxy;
+                let newProxy = 'http://' + this.getProxy(true);
+                this.options.proxy = req.proxy = newProxy;
 
-            return this.checkDeal(req);
+                return this.auth().then(() => {
+
+                    jar._jar.store.idx = {};
+
+                    this.cookies.forEach((item) => {
+                        jar.setCookie(`${item.name}=${item.value}`, baseUrl);
+                    });
+
+                    req.headers = this.headers;
+                    return this.checkDeal(req);
+                })
+            } else {
+                console.log("Unexpected error checkDeal: ",err.statusCode);
+
+                let newProxy = 'http://' + this.getProxy(true);
+                this.options.proxy = req.proxy = newProxy;
+
+                return this.checkDeal(req);
+            }
         }).then(res => typeof res === 'string' ? JSON.parse(res) : res)
     };
 
@@ -219,11 +244,12 @@ function Bot(config) {
         options.method = 'GET';
         options.uri = `/Kad/CaseDocumentsPage?caseId=${caseId}&page=${pageIndex}&perPage=25`;
 
-        let res = await this.parseDoc(options);
+        let res = await this.parseDoc(options),
+            totalPages = res["Result"]["PagesCount"];
 
-        let jsonRes = typeof res === 'string' ? JSON.parse(res) : res;
+        console.log(`Parsing documents: ${caseId} (${pageIndex}/${totalPages})`);
 
-        jsonRes["Result"]["Items"].forEach(item => {
+        res["Result"]["Items"].forEach(item => {
             if (item["ContentTypes"].some(item => item.includes('О включении требований в реестр требований кредиторов'))) {
                 let caseId = item['CaseId'],
                     id = item['Id'],
@@ -233,20 +259,41 @@ function Bot(config) {
             }
         });
 
-        if (pageIndex != jsonRes["Result"]["PagesCount"] && jsonRes["Result"]["TotalCount"] > 0)
+        if (pageIndex != totalPages && res["Result"]["TotalCount"] > 0)
             return this.parseDocs(deal, pageIndex + 1, accum);
 
         return accum;
     };
 
     this.parseDoc = function (req) {
-        return rp(options).catch((err) => {
-            console.log(err);
+        return rp(req).catch((err) => {
+            if (err.statusCode === 451) {
+                console.info('Session ban, re-auth');
+               
+                let newProxy = 'http://' + this.getProxy(true);
+                console.log(`${this.options.proxy} -> ${newProxy}`)
+                this.options.proxy = req.proxy = newProxy;
+                
+                return this.auth().then(() => {
 
-            let newProxy = 'http://' + this.getProxy(true);
-            this.options.proxy = req.proxy = newProxy;
+                    jar._jar.store.idx = {};
 
-            return this.parseDoc(req);
+                    this.cookies.forEach((item) => {
+                        jar.setCookie(`${item.name}=${item.value}`, baseUrl);
+                    });
+
+                    req.headers = this.headers;
+                    return this.parseDoc(req);
+                })
+            } else {
+
+                console.log("Unexpected error parseDoc: ",err.statusCode);
+
+                let newProxy = 'http://' + this.getProxy(true);
+                this.options.proxy = req.proxy = newProxy;
+
+                return this.parseDoc(req);
+            }
 
         }).then(res => typeof res === 'string' ? JSON.parse(res) : res)
     };
