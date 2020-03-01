@@ -174,7 +174,7 @@ function Bot(config) {
 				return accum
 			}
 		}).catch(err => {
-            console.log("Unexpected error on options: ",err.statusCode);
+            console.log(err.name);
             if (err.statusCode === 429 || err.name === 'RequestError') {
                 this.options.proxy = this.getProxy(true);
                 return this.searchUrls(searchItem, pageIndex, accum)
@@ -225,7 +225,7 @@ function Bot(config) {
                     return this.checkDeal(req);
                 })
             } else {
-                console.log("Unexpected error checkDeal: ",err.statusCode);
+                console.log(err);
 
                 let newProxy = 'http://' + this.getProxy(true);
                 this.options.proxy = req.proxy = newProxy;
@@ -244,36 +244,41 @@ function Bot(config) {
         options.method = 'GET';
         options.uri = `/Kad/CaseDocumentsPage?caseId=${caseId}&page=${pageIndex}&perPage=25`;
 
-        let res = await this.parseDoc(options),
-            totalPages = res["Result"]["PagesCount"];
+        return this.parseDoc(options).then(res => {
 
-        console.log(`Parsing documents: ${caseId} (${pageIndex}/${totalPages})`);
+            let totalPages = res["Result"]["PagesCount"];
 
-        res["Result"]["Items"].forEach(item => {
-            if (item["ContentTypes"].some(item => item.includes('О включении требований в реестр требований кредиторов'))) {
-                let caseId = item['CaseId'],
-                    id = item['Id'],
-                    filename = item['FileName'],
-                    url = `https://kad.arbitr.ru/Document/Pdf/${caseId}/${id}/${filename}?isAddStamp=False`;
-                accum.push({ url, bankID: deal.id });
-            }
-        });
+            console.log(`Parsing documents: ${caseId} (${pageIndex}/${totalPages})`);
 
-        if (pageIndex != totalPages && res["Result"]["TotalCount"] > 0)
-            return this.parseDocs(deal, pageIndex + 1, accum);
+            res["Result"]["Items"].forEach(item => {
+                if (item["ContentTypes"].some(item => item.includes('О включении требований в реестр требований кредиторов'))) {
+                    let caseId = item['CaseId'],
+                        id = item['Id'],
+                        filename = item['FileName'],
+                        url = `https://kad.arbitr.ru/Document/Pdf/${caseId}/${id}/${filename}?isAddStamp=False`;
+                    accum.push({ url, bankID: deal.id });
+                }
+            });
 
-        return accum;
+            if (pageIndex != totalPages && res["Result"]["TotalCount"] > 0)
+                return this.parseDocs(deal, pageIndex + 1, accum);
+
+            return accum;
+
+        }).catch(err => {
+            console.error(err);
+            return accum;
+        })
     };
 
     this.parseDoc = function (req) {
         return rp(req).catch((err) => {
             if (err.statusCode === 451) {
                 console.info('Session ban, re-auth');
-               
+
                 let newProxy = 'http://' + this.getProxy(true);
-                console.log(`${this.options.proxy} -> ${newProxy}`)
                 this.options.proxy = req.proxy = newProxy;
-                
+
                 return this.auth().then(() => {
 
                     jar._jar.store.idx = {};
@@ -287,7 +292,7 @@ function Bot(config) {
                 })
             } else {
 
-                console.log("Unexpected error parseDoc: ",err.statusCode);
+                console.log(err);
 
                 let newProxy = 'http://' + this.getProxy(true);
                 this.options.proxy = req.proxy = newProxy;
