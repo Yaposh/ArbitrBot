@@ -174,9 +174,11 @@ function Bot(config) {
 				return accum
 			}
 		}).catch(err => {
-            console.log(err.name);
+            console.log(err.statusCode,": limit error");
             if (err.statusCode === 429 || err.name === 'RequestError') {
+                console.log(`Banned proxy: ${this.options.proxy}`);
                 this.options.proxy = this.getProxy(true);
+                console.log(`New proxy: ${this.options.proxy}`);
                 return this.searchUrls(searchItem, pageIndex, accum)
             }
         })
@@ -209,7 +211,7 @@ function Bot(config) {
         return rp(req).catch((err) => {
             if (err.statusCode === 451) {
                 console.info('Session ban, re-auth');
-
+l
                 let newProxy = 'http://' + this.getProxy(true);
                 this.options.proxy = req.proxy = newProxy;
 
@@ -225,9 +227,10 @@ function Bot(config) {
                     return this.checkDeal(req);
                 })
             } else {
-                console.log(err);
+                console.log("Unexpected error: ", err.statusCode);
 
                 let newProxy = 'http://' + this.getProxy(true);
+                console.log(`change proxy: ${this.options.proxy} -> ${newProxy}`);
                 this.options.proxy = req.proxy = newProxy;
 
                 return this.checkDeal(req);
@@ -292,7 +295,7 @@ function Bot(config) {
                 })
             } else {
 
-                console.log(err);
+                console.log("Unexpected err: ",err.statusCode);
 
                 let newProxy = 'http://' + this.getProxy(true);
                 this.options.proxy = req.proxy = newProxy;
